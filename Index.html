@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Treasure Map Hunt — Binary Sea-Chart Adventure</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --sea-deep: #0b131e;
+      --sea-mid: #111d2e;
+      --sea-light: #19293f;
+      --parchment: #f4ebd8;
+      --parchment-dark: #e2d1b3;
+      --ink: #2a1f14;
+      --gold: #eab308;
+      --gold-glow: rgba(234, 179, 8, 0.45);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.45);
+    }
+
+    body {
+      background-color: var(--sea-deep);
+      color: #e2e8f0;
+      font-family: 'Crimson Pro', Georgia, serif;
+      background-image: 
+        radial-gradient(circle at 20% 25%, rgba(25, 45, 70, 0.55) 0%, transparent 55%),
+        radial-gradient(circle at 80% 75%, rgba(16, 185, 129, 0.08) 0%, transparent 50%),
+        linear-gradient(to bottom, #09101a, #0e1826);
+      min-height: 100vh;
+    }
+
+    .font-display {
+      font-family: 'Cinzel', serif;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Nautical grid lines on SVG map */
+    .sea-grid {
+      background-size: 36px 36px;
+      background-image:
+        linear-gradient(to right, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+    }
+
+    /* Parchment Card Texture */
+    .parchment-panel {
+      background: linear-gradient(145deg, #f7efe0 0%, #eadbc0 100%);
+      color: var(--ink);
+      border: 2px solid #b89763;
+      box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7), inset 0 0 30px rgba(160, 120, 65, 0.18);
+    }
+
+    /* Pulsing animation for unlocked/available nodes */
+    @keyframes pulseRing {
+      0% {
+        transform: scale(0.95);
+        opacity: 0.85;
+      }
+      70% {
+        transform: scale(1.45);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1.45);
+        opacity: 0;
+      }
+    }
+
+    .node-pulse {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: pulseRing 2.1s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+    }
+
+    /* Subtle floating compass */
+    @keyframes slowSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .compass-spin {
+      transform-origin: center;
+      animation: slowSpin 90s linear infinite;
+    }
+
+    /* Path drawing glow */
+    .branch-explored {
+      stroke: #f59e0b;
+      stroke-width: 3.5;
+      filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.55));
+      transition: all 0.5s ease;
+    }
+
+    .branch-unlocked {
+      stroke: #38bdf8;
+      stroke-width: 2.5;
+      stroke-dasharray: 6 5;
+      opacity: 0.85;
+      transition: all 0.4s ease;
+    }
+
+    .branch-locked {
+      stroke: #334155;
+      stroke-width: 1.75;
+      stroke-dasharray: 4 6;
+      opacity: 0.45;
+      transition: all 0.4s ease;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="antialiased selection:bg-amber-500/30 selection:text-amber-200">
+
+  <!-- Top Navigation & Progress Header -->
+  <header class="sticky top-0 z-30 border-b border-slate-800/90 bg-slate-950/90 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-lg shadow-amber-500/20 border border-amber-300/40">
+          <!-- Compass SVG -->
+          <svg class="w-6 h-6 text-slate-950" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" fill="currentColor" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="font-display text-lg sm:text-xl font-bold tracking-wider text-amber-400 leading-tight">
+            TREASURE MAP HUNT
+          </h1>
+          <p class="text-xs text-slate-400 font-mono-code">Binary Sea-Chart Expedition • 4 Levels (15 Nodes)</p>
+        </div>
+      </div>
+
+      <!-- Progress Bar & Controls -->
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <!-- Landmarks Explored Pill -->
+        <div class="flex items-center gap-3 bg-slate-900/90 border border-slate-700/80 px-3.5 py-1.5 rounded-xl">
+          <div class="text-xs">
+            <span class="text-slate-400 block uppercase tracking-wider text-[10px] font-mono-code">Landmarks Explored</span>
+            <span id="progress-text" class="font-mono-code font-bold text-amber-400 text-sm">0 / 15</span>
+          </div>
+          <div class="w-24 sm:w-32 h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+            <div id="progress-bar" class="h-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all duration-500 rounded-full" style="width: 0%"></div>
+          </div>
+          <span id="progress-pct" class="text-xs font-mono-code text-emerald-400 font-semibold">0%</span>
+        </div>
+
+        <!-- Final Treasure Status Button -->
+        <button id="chest-header-btn" onclick="handleTreasureButtonClick()"
+          class="flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-display font-bold tracking-wide transition-all cursor-pointer bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500">
+          <span id="chest-header-icon">🔒</span>
+          <span id="chest-header-label">Vault Locked</span>
+        </button>
+
+        <!-- Snapshot / Map Report Modal Trigger -->
+        <button onclick="openSnapshotModal()"
+          class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 border border-sky-700/60 text-xs font-semibold transition-all cursor-pointer"
+          title="View or export Explored vs. Unexplored Map Report">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+          <span class="hidden sm:inline">Map Snapshot</span>
+        </button>
+
+        <!-- Sound Toggle -->
+        <button id="sound-toggle-btn" onclick="toggleSound()"
+          class="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-400 transition-all cursor-pointer"
+          title="Toggle Nautical Audio">
+          <svg id="sound-on-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+          </svg>
+          <svg id="sound-off-icon" class="w-4 h-4 hidden text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        </button>
+
+        <!-- Reset Button -->
+        <button onclick="openResetConfirm()"
+          class="p-2 rounded-xl bg-slate-900 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-700/60 text-slate-400 hover:text-rose-300 transition-all cursor-pointer"
+          title="Reset Expedition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace: Split Sea-Chart Map & Parchment Clue Panel -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-5 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+    <!-- LEFT / TOP: Interactive Binary Tree Exploration Map (7 columns on desktop) -->
+    <section class="lg:col-span-7 bg-slate-950/85 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <!-- Map Header & Legend -->
+      <div class="px-4 py-3 border-b border-slate-800/90 bg-slate-900/60 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+          <h2 class="font-display text-sm sm:text-base font-bold text-slate-100 tracking-wide">
+            LIVE BINARY ARCHIPELAGO CHART
+          </h2>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex flex-wrap items-center gap-3 text-[11px] font-mono-code">
+          <span class="flex items-center gap-1.5 text-emerald-400">
+            <span class="w-3 h-3 rounded-full bg-emerald-500/20 border-2 border-emerald-400 inline-block"></span>
+            Explored
+          </span>
+          <span class="flex items-center gap-1.5 text-sky-400">
+            <span class="w-3 h-3 rounded-full bg-sky-500/20 border-2 border-sky-400 inline-block"></span>
+            Unlocked
+          </span>
+          <span class="flex items-center gap-1.5 text-amber-400">
+            <span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+            Active
+          </span>
+          <span class="flex items-center gap-1.5 text-slate-500">
+            <span class="w-3 h-3 rounded-full bg-slate-800 border border-slate-600 inline-block"></span>
+            Fog (Locked)
+          </span>
+        </div>
+      </div>
+
+      <!-- Interactive SVG Tree Canvas -->
+      <div class="relative sea-grid w-full overflow-x-auto select-none">
+        <svg id="tree-svg" viewBox="0 0 860 560" class="w-full h-auto min-w-[600px] block">
+          <defs>
+            <radialGradient id="activeGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.55" />
+              <stop offset="100%" stop-color="#f59e0b" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="exploredGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#10b981" stop-opacity="0.35" />
+              <stop offset="100%" stop-color="#10b981" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+
+          <!-- Decorative Sea Chart Compass Watermark -->
+          <g class="compass-spin opacity-10" transform="translate(430, 280)">
+            <circle cx="0" cy="0" r="195" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6 6" />
+            <circle cx="0" cy="0" r="145" fill="none" stroke="#94a3b8" stroke-width="0.75" />
+            <line x1="-215" y1="0" x2="215" y2="0" stroke="#94a3b8" stroke-width="0.75" />
+            <line x1="0" y1="-215" x2="0" y2="215" stroke="#94a3b8" stroke-width="0.75" />
+            <polygon points="0,-180 14,-20 180,0 14,20 0,180 -14,20 -180,0 -14,-20" fill="none" stroke="#94a3b8" stroke-width="1" />
+          </g>
+
+          <!-- Level Horizontal Guide Lines & Labels -->
+          <g font-family="JetBrains Mono, monospace" font-size="10" fill="#64748b">
+            <text x="16" y="64">LVL 0 • ORIGIN</text>
+            <line x1="16" y1="72" x2="844" y2="72" stroke="#1e293b" stroke-width="1" />
+
+            <text x="16" y="184">LVL 1 • STRAITS</text>
+            <line x1="16" y1="192" x2="844" y2="192" stroke="#1e293b" stroke-width="1" />
+
+            <text x="16" y="314">LVL 2 • ATOLLS</text>
+            <line x1="16" y1="322" x2="844" y2="322" stroke="#1e293b" stroke-width="1" />
+
+            <text x="16" y="444">LVL 3 • SANCTUMS</text>
+            <line x1="16" y1="452" x2="844" y2="452" stroke="#1e293b" stroke-width="1" />
+          </g>
+
+          <!-- Layer for Tree Branches (Edges) -->
+          <g id="svg-edges-layer"></g>
+
+          <!-- Layer for Tree Landmarks (Nodes) -->
+          <g id="svg-nodes-layer"></g>
+        </svg>
+      </div>
+
+      <!-- Footer Instruction Strip & Treasure Vault Banner -->
+      <div class="px-4 py-3 bg-slate-900/90 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p class="text-xs text-slate-400">
+          <span class="text-amber-400 font-semibold">Tip:</span> Click any <span class="text-sky-400 underline">unlocked</span> or <span class="text-emerald-400 underline">explored</span> landmark on the chart to sail there directly.
+        </p>
+
+        <button id="treasure-vault-card" onclick="handleTreasureButtonClick()"
+          class="w-full sm:w-auto px-4 py-2 rounded-xl border font-display text-xs font-bold tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer bg-slate-950 border-slate-700 text-slate-400">
+          <span id="vault-icon">🔒</span>
+          <span id="vault-text">FINAL TREASURE: 15 LANDMARKS REQUIRED</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- RIGHT / BOTTOM: Parchment Clue & Puzzle Journal (5 columns on desktop) -->
+    <section class="lg:col-span-5 parchment-panel rounded-2xl p-5 sm:p-6 relative overflow-hidden">
+      <!-- Top Metadata Strip -->
+      <div class="flex items-center justify-between gap-2 pb-3 mb-4 border-b border-amber-900/20">
+        <div class="flex items-center gap-2">
+          <span id="node-badge" class="px-2.5 py-0.5 rounded-md bg-amber-900 text-amber-100 font-mono-code text-xs font-semibold">
+            NODE #1 • LEVEL 0
+          </span>
+          <span id="node-path-code" class="font-mono-code text-xs text-amber-900/75 font-semibold">
+            ROOT
+          </span>
+        </div>
+        <span id="node-status-pill" class="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono-code bg-sky-900/15 text-sky-900 border border-sky-800/30">
+          UNEXPLORED
+        </span>
+      </div>
+
+      <!-- Landmark Title & Subtitle -->
+      <div class="mb-4">
+        <div class="flex items-center gap-2.5">
+          <span id="landmark-emoji" class="text-3xl">⚓</span>
+          <div>
+            <h2 id="landmark-title" class="font-display text-xl sm:text-2xl font-extrabold text-amber-950 leading-tight">
+              Smuggler's Cove
+            </h2>
+            <p id="landmark-region" class="text-xs font-mono-code uppercase tracking-wider text-amber-800/80">
+              Starting Anchorage • Coordinates 00°N 00°W
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Explorer Lore / Story Clue -->
+      <div class="bg-amber-950/5 border border-amber-900/15 rounded-xl p-4 mb-5">
+        <p class="text-[11px] font-mono-code uppercase tracking-wider text-amber-900/70 mb-1.5 font-semibold">
+          Captain's Log & Clue Inscription
+        </p>
+        <p id="landmark-lore" class="text-base sm:text-[17px] leading-relaxed text-stone-800 italic">
+          "Every legend begins where the tide meets iron. Decipher the ancient sundial on the pier to chart the twin sea-lanes ahead."
+        </p>
+      </div>
+
+      <!-- Interactive Puzzle / Riddle Challenge Box -->
+      <div id="puzzle-container" class="mb-5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-display font-bold uppercase tracking-wider text-amber-950 flex items-center gap-1.5">
+            <span>🧭</span> Landmark Trial
+          </span>
+          <span id="clue-fragment-tag" class="text-[11px] font-mono-code text-amber-800 bg-amber-500/20 px-2 py-0.5 rounded">
+            Reward: Unlocks 2 Branches
+          </span>
+        </div>
+
+        <p id="puzzle-question" class="text-sm sm:text-base font-semibold text-stone-900 mb-3">
+          Which direction does a magnetic compass needle always seek?
+        </p>
+
+        <!-- Multiple Choice Options -->
+        <div id="puzzle-options" class="space-y-2">
+          <!-- Populated dynamically via JS -->
+        </div>
+
+        <!-- Feedback Message Box (No alert() used!) -->
+        <div id="puzzle-feedback" class="hidden mt-3 p-3 rounded-xl text-sm font-medium border"></div>
+      </div>
+
+      <!-- Branching Navigation Controls (Left Child / Right Child / Parent Backtrack) -->
+      <div class="pt-4 border-t border-amber-900/20">
+        <p class="text-[11px] font-mono-code uppercase tracking-wider text-amber-900/75 mb-2.5 font-semibold">
+          Charted Sea-Lanes From This Landmark
+        </p>
+
+        <div id="branch-actions" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <!-- Populated dynamically via JS -->
+        </div>
+
+        <!-- Backtrack to Parent Button -->
+        <div id="parent-nav-container" class="mt-2.5 hidden">
+          <button id="backtrack-btn" onclick="goToParentNode()"
+            class="w-full py-2 px-3 rounded-xl bg-stone-800/10 hover:bg-stone-800/20 text-stone-800 border border-stone-800/20 text-xs font-mono-code font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+            <span>↖</span> Sail Back to Parent Landmark
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast Notification Banner -->
+  <div id="toast-banner" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-slate-900 border border-amber-500/60 text-amber-200 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm">
+      <span id="toast-icon" class="text-lg">✨</span>
+      <span id="toast-message" class="font-medium">Landmark explored!</span>
+    </div>
+  </div>
+
+  <!-- MODAL 1: Final Treasure Reveal Celebration -->
+  <div id="treasure-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+    <div class="parchment-panel max-w-xl w-full rounded-3xl p-6 sm:p-8 text-center relative shadow-2xl border-4 border-amber-500">
+      <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-4xl shadow-xl border-2 border-amber-200">
+        👑
+      </div>
+      <span class="px-3 py-1 rounded-full bg-emerald-800 text-emerald-100 font-mono-code text-xs font-bold tracking-wider">
+        100% ARCHIPELAGO EXPLORED (15 / 15)
+      </span>
+      <h2 class="font-display text-2xl sm:text-3xl font-extrabold text-amber-950 mt-3 mb-2">
+        THE SOVEREIGN'S SUNKEN TREASURE!
+      </h2>
+      <p class="text-stone-800 text-base leading-relaxed mb-5">
+        Every strait, atoll, and hidden sanctum across all four levels of the binary sea-chart has been conquered! With all <strong>15 Clue Fragments</strong> united, the ancient obsidian seal shatters to reveal the Crown of Astral Tides and chests overflowing with celestial gold.
+      </p>
+
+      <!-- Expedition Summary Stats -->
+      <div class="grid grid-cols-3 gap-3 bg-amber-950/10 border border-amber-900/20 rounded-2xl p-3.5 mb-6 font-mono-code">
+        <div>
+          <span class="block text-[10px] text-amber-900/70 uppercase">Landmarks</span>
+          <span class="text-base sm:text-lg font-bold text-emerald-800">15 / 15</span>
+        </div>
+        <div>
+          <span class="block text-[10px] text-amber-900/70 uppercase">Tree Depth</span>
+          <span class="text-base sm:text-lg font-bold text-amber-950">4 Levels</span>
+        </div>
+        <div>
+          <span class="block text-[10px] text-amber-900/70 uppercase">Riddles Solved</span>
+          <span id="stat-attempts" class="text-base sm:text-lg font-bold text-amber-950">15</span>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3 justify-center">
+        <button onclick="closeTreasureModal(); openSnapshotModal();"
+          class="px-5 py-3 rounded-xl bg-sky-900 hover:bg-sky-800 text-white font-display text-xs font-bold tracking-wider transition-all cursor-pointer">
+          VIEW COMPLETED MAP SNAPSHOT
+        </button>
+        <button onclick="resetGame(); closeTreasureModal();"
+          class="px-5 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-display text-xs font-bold tracking-wider shadow-lg transition-all cursor-pointer">
+          PLAY AGAIN / NEW EXPEDITION
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Explored vs. Unexplored Map Snapshot & Project Submission Report -->
+  <div id="snapshot-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+    <div class="bg-slate-900 border border-slate-700 max-w-4xl w-full rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <!-- Modal Header -->
+      <div class="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="font-display text-lg font-bold text-amber-400">
+            EXPEDITION MAP SNAPSHOT & COVERAGE REPORT
+          </h3>
+          <p class="text-xs text-slate-400 font-mono-code">
+            Live verification of Explored vs. Unlocked vs. Unexplored (Fog) tree branches
+          </p>
+        </div>
+        <button onclick="closeSnapshotModal()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer">
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto space-y-5">
+        <!-- Summary Metrics -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono-code">
+          <div class="bg-slate-950 border border-emerald-500/30 rounded-xl p-3">
+            <span class="text-[11px] text-slate-400 block">EXPLORED NODES</span>
+            <span id="snap-explored-count" class="text-xl font-bold text-emerald-400">0</span>
+          </div>
+          <div class="bg-slate-950 border border-sky-500/30 rounded-xl p-3">
+            <span class="text-[11px] text-slate-400 block">UNLOCKED FRONTIER</span>
+            <span id="snap-unlocked-count" class="text-xl font-bold text-sky-400">1</span>
+          </div>
+          <div class="bg-slate-950 border border-slate-700 rounded-xl p-3">
+            <span class="text-[11px] text-slate-400 block">UNEXPLORED (FOG)</span>
+            <span id="snap-locked-count" class="text-xl font-bold text-slate-400">14</span>
+          </div>
+          <div class="bg-slate-950 border border-amber-500/30 rounded-xl p-3">
+            <span class="text-[11px] text-slate-400 block">TREASURE SEAL</span>
+            <span id="snap-vault-status" class="text-sm font-bold text-amber-400">LOCKED</span>
+          </div>
+        </div>
+
+        <!-- Cloned SVG Map Visual Snapshot -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3">
+          <div class="text-xs font-mono-code text-slate-400 mb-2 flex items-center justify-between">
+            <span>VISUAL BINARY TREE STATE (SCREENSHOT READY)</span>
+            <span id="snap-timestamp" class="text-slate-500"></span>
+          </div>
+          <div id="snapshot-svg-container" class="w-full overflow-x-auto sea-grid rounded-lg border border-slate-800/80"></div>
+        </div>
+
+        <!-- Detailed Node-by-Node Table -->
+        <div>
+          <h4 class="text-xs font-mono-code uppercase tracking-wider text-slate-400 mb-2">
+            Binary Tree Traversal Log (All 15 Landmarks)
+          </h4>
+          <div class="overflow-x-auto border border-slate-800 rounded-xl">
+            <table class="w-full text-left text-xs font-mono-code">
+              <thead class="bg-slate-950 text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th class="py-2.5 px-3">ID</th>
+                  <th class="py-2.5 px-3">Level</th>
+                  <th class="py-2.5 px-3">Branch Path</th>
+                  <th class="py-2.5 px-3">Landmark Name</th>
+                  <th class="py-2.5 px-3">Status</th>
+                </tr>
+              </thead>
+              <tbody id="snapshot-table-body" class="divide-y divide-slate-800/70 bg-slate-900/50">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <button onclick="copyReportText()"
+          class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono-code font-semibold transition-all cursor-pointer">
+          📋 Copy Text Report to Clipboard
+        </button>
+        <button onclick="closeSnapshotModal()"
+          class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-display font-bold transition-all cursor-pointer">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: Custom Reset Confirmation (Replaces confirm()) -->
+  <div id="reset-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-700 max-w-md w-full rounded-2xl p-6 shadow-2xl">
+      <h3 class="font-display text-lg font-bold text-amber-400 mb-2">Abandon Current Voyage?</h3>
+      <p class="text-sm text-slate-300 mb-5">
+        This will restore the fog-of-war across all 15 landmarks and seal the Final Treasure Chest again.
+      </p>
+      <div class="flex justify-end gap-3">
+        <button onclick="closeResetConfirm()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer">
+          Keep Exploring
+        </button>
+        <button onclick="resetGame(); closeResetConfirm();" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer">
+          Reset Map
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * =========================================================================
+     * TREASURE MAP HUNT — BINARY TREE ADVENTURE ENGINE
+     * =========================================================================
+     * Architecture:
+     * - Complete Binary Tree with 4 Levels (Depth 0 to 3) = 15 Total Landmarks.
+     * - Node indexing follows standard 0-based binary heap/tree layout:
+     *     Parent(i) = Math.floor((i - 1) / 2)
+     *     LeftChild(i) = 2 * i + 1
+     *     RightChild(i) = 2 * i + 2
+     * - States per node:
+     *     'locked'   -> Fog-of-war; parent has not been explored yet.
+     *     'unlocked' -> Parent explored; reachable & ready to solve.
+     *     'explored' -> Puzzle solved; grants clue fragment & unlocks children.
+     */
+
+    const LANDMARKS_DATA = [
+      // LEVEL 0 (Root - 1 Node)
+      {
+        id: 0,
+        level: 0,
+        pathCode: "ROOT",
+        emoji: "⚓",
+        name: "Smuggler's Cove",
+        region: "Origin Anchorage • 00°N 00°W",
+        lore: "Where the black-sailed galleon dropped anchor at dawn. Carved into the basalt pier is a brass astrolabe pointing toward two diverging sea-lanes: the Whispering Strait to the West and Kraken's Maw to the East.",
+        question: "A captain faces North and turns 90 degrees clockwise toward the rising sun. Which heading is the ship now sailing?",
+        options: ["East", "West", "South-West"],
+        answerIndex: 0,
+        fragment: "Clue I: 'Twin tides divide the seeker's path.'"
+      },
+
+      // LEVEL 1 (2 Nodes: Left = 1, Right = 2)
+      {
+        id: 1,
+        level: 1,
+        pathCode: "L",
+        emoji: "🌫️",
+        name: "Whispering Strait",
+        region: "Western Passage • 12°N 18°W",
+        lore: "Dense silver mist clings to towering sea stacks. Echoes of ancient mariners recite numbers from the reef—only a sharp mind can steer clear of the shoals.",
+        question: "If 3 signal lanterns burn 3 ounces of whale oil in 3 hours, how many ounces do 3 lanterns burn in 1 hour?",
+        options: ["3 ounces", "1 ounce", "9 ounces"],
+        answerIndex: 1,
+        fragment: "Clue II: 'Through silver fog, the western star endures.'"
+      },
+      {
+        id: 2,
+        level: 1,
+        pathCode: "R",
+        emoji: "🐙",
+        name: "Kraken's Maw",
+        region: "Eastern Trench • 14°N 22°E",
+        lore: "Jagged basalt fangs rise from boiling indigo waters. Carved onto a sunken figurehead is a warning left by First Mate Vance.",
+        question: "What has a bed but never sleeps, can run but never walks, and has a mouth but never speaks?",
+        options: ["A river", "An anchor chain", "A crow's nest"],
+        answerIndex: 0,
+        fragment: "Clue III: 'Beneath the leviathan's arch lies the eastern key.'"
+      },
+
+      // LEVEL 2 (4 Nodes: 3, 4, 5, 6)
+      {
+        id: 3,
+        level: 2,
+        pathCode: "L → L",
+        emoji: "🗿",
+        name: "Coral Totem Atoll",
+        region: "Outer West • 24°N 35°W",
+        lore: "Ringed by luminescent turquoise reefs, three weathered stone idols guard a tidal lagoon. Each idol holds a celestial tablet.",
+        question: "Which celestial body governs the primary rise and fall of Earth's ocean tides?",
+        options: ["The Moon", "Polaris (North Star)", "Mars"],
+        answerIndex: 0,
+        fragment: "Clue IV: 'The pale moon pulls the outer western vault.'"
+      },
+      {
+        id: 4,
+        level: 2,
+        pathCode: "L → R",
+        emoji: "⛵",
+        name: "Phantom Brigantine",
+        region: "Inner West • 26°N 11°W",
+        lore: "A derelict frigate frozen in a windless doldrum. Its captain's logbook lies open upon the chart table, untouched by salt or rot.",
+        question: "In nautical speed measurement, what does 1 'Knot' equal?",
+        options: ["1 nautical mile per hour", "1 kilometer per hour", "10 fathoms per minute"],
+        answerIndex: 0,
+        fragment: "Clue V: 'Still waters preserve the ghost ship's cipher.'"
+      },
+      {
+        id: 5,
+        level: 2,
+        pathCode: "R → L",
+        emoji: "🌋",
+        name: "Cinder Spire Isle",
+        region: "Inner East • 28°N 15°E",
+        lore: "Black volcanic glass crunches beneath your boots as embers drift from the caldera. A bronze obelisk stands cooled beside a sulfur spring.",
+        question: "I am always hungry and must always be fed; the finger I touch will soon turn red. What am I?",
+        options: ["Fire", "Rust", "Sea salt"],
+        answerIndex: 0,
+        fragment: "Clue VI: 'From ash and obsidian rises the sixth seal.'"
+      },
+      {
+        id: 6,
+        level: 2,
+        pathCode: "R → R",
+        emoji: "⛈️",
+        name: "Tempest Beacon",
+        region: "Outer East • 31°N 44°E",
+        lore: "Lightning forks across an iron lighthouse perched atop razor cliffs. Inside the prism room, a brass wheel locks the storm shutters.",
+        question: "You see a flash of lightning and hear thunder 5 seconds later. Roughly how far away is the storm?",
+        options: ["About 1 mile (1.6 km)", "About 10 miles", "Directly overhead"],
+        answerIndex: 0,
+        fragment: "Clue VII: 'Thunder heralds the easternmost watchtower.'"
+      },
+
+      // LEVEL 3 (8 Leaf Sanctums: 7, 8, 9, 10, 11, 12, 13, 14)
+      {
+        id: 7,
+        level: 3,
+        pathCode: "L → L → L",
+        emoji: "🐚",
+        name: "Abyssal Pearl Grotto",
+        region: "Far West Sanctum • 40°N 52°W",
+        lore: "Bioluminescent anemones illuminate a cathedral cavern beneath the tide line. A giant clam shell rests atop a marble plinth.",
+        question: "What disappears the very moment you say its name aloud?",
+        options: ["Silence", "A shadow", "Sea foam"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 1/8: Pearl of Silence."
+      },
+      {
+        id: 8,
+        level: 3,
+        pathCode: "L → L → R",
+        emoji: "🔭",
+        name: "Starlight Observatory",
+        region: "Western Dome • 42°N 39°W",
+        lore: "An ancient brass sextant dome open to the night sky. Star maps etched in silver leaf align with the constellation Orion.",
+        question: "Which instrument measures the angle between a celestial object and the horizon for navigation?",
+        options: ["Sextant", "Barometer", "Anemometer"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 2/8: Lens of Polaris."
+      },
+      {
+        id: 9,
+        level: 3,
+        pathCode: "L → R → L",
+        emoji: "🗝️",
+        name: "Sunken Reliquary",
+        region: "Mid-West Vault • 44°N 24°W",
+        lore: "Flooded cloisters of a drowned monastery. Through crystal-clear water, an ornate iron reliquary gleams beneath a stone arch.",
+        question: "The more of me there is, the less you can see. What am I?",
+        options: ["Darkness", "Gold doubloons", "Spyglass glass"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 3/8: Key of Deep Shadow."
+      },
+      {
+        id: 10,
+        level: 3,
+        pathCode: "L → R → R",
+        emoji: "⏳",
+        name: "Hourglass Sandbar",
+        region: "Central West Shoal • 45°N 08°W",
+        lore: "Golden dunes shift with every wave, revealing a monolithic glass timer half-buried in quartz sand.",
+        question: "What has hands and a face, yet cannot hold a cutlass or smile?",
+        options: ["A clock", "A figurehead", "A compass rose"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 4/8: Sands of Eternity."
+      },
+      {
+        id: 11,
+        level: 3,
+        pathCode: "R → L → L",
+        emoji: "🐉",
+        name: "Serpent's Spine Reef",
+        region: "Central East Shoal • 46°N 09°E",
+        lore: "Fossilized ribs of a colossal sea dragon form a natural archway over a sapphire lagoon.",
+        question: "What can travel all around the world while staying in a single corner?",
+        options: ["A postage stamp", "A trade wind", "An albatross"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 5/8: Scale of the Leviathan."
+      },
+      {
+        id: 12,
+        level: 3,
+        pathCode: "R → L → R",
+        emoji: "⚖️",
+        name: "Smuggler's Scale",
+        region: "Mid-East Vault • 47°N 27°E",
+        lore: "Hidden behind a waterfall lies a balanced brass scale used by pirate lords to divide plunder fairly.",
+        question: "Which weighs more: a pound of solid gold doubloons or a pound of seagull feathers?",
+        options: ["They weigh the exact same", "The gold doubloons", "The seagull feathers"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 6/8: Balance of Equity."
+      },
+      {
+        id: 13,
+        level: 3,
+        pathCode: "R → R → L",
+        emoji: "🧊",
+        name: "Frostfang Glacier",
+        region: "Eastern Fjord • 49°N 41°E",
+        lore: "Towering walls of ancient blue ice guard a frozen cove where an explorer's copper chest sits encased in rime.",
+        question: "What is full of holes yet still holds water?",
+        options: ["A sponge", "A fishing net", "A leaky hull"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 7/8: Heart of Rime."
+      },
+      {
+        id: 14,
+        level: 3,
+        pathCode: "R → R → R",
+        emoji: "☀️",
+        name: "Horizon's Crown",
+        region: "Far East Sanctum • 51°N 58°E",
+        lore: "At the edge of the charted world stands a golden obelisk catching the first rays of sunrise over an endless sea.",
+        question: "What goes up every morning and comes down every evening, yet never moves a single step?",
+        options: ["The Sun's shadow / temperature", "The anchor", "The mainmast"],
+        answerIndex: 0,
+        fragment: "Sanctum Seal 8/8: Crest of Dawn."
+      }
+    ];
+
+    // Pre-calculated SVG coordinates for clean 4-level binary tree layout (860x560 viewBox)
+    const NODE_COORDS = [
+      // Level 0 (1 node)
+      { x: 430, y: 55 },
+      // Level 1 (2 nodes)
+      { x: 230, y: 175 }, { x: 630, y: 175 },
+      // Level 2 (4 nodes)
+      { x: 130, y: 305 }, { x: 330, y: 305 }, { x: 530, y: 305 }, { x: 730, y: 305 },
+      // Level 3 (8 nodes)
+      { x: 75,  y: 440 }, { x: 185, y: 440 }, { x: 280, y: 440 }, { x: 380, y: 440 },
+      { x: 480, y: 440 }, { x: 580, y: 440 }, { x: 675, y: 440 }, { x: 785, y: 440 }
+    ];
+
+    // Game State
+    let gameState = {
+      currentNodeId: 0,
+      // 'locked' | 'unlocked' | 'explored'
+      nodeStatus: Array(15).fill('locked'),
+      soundEnabled: true,
+      totalSolves: 0,
+      treasureCelebrated: false
+    };
+
+    // Web Audio API Synthesizer for subtle nautical clicks & chimes
+    let audioCtx = null;
+    function playSound(type) {
+      if (!gameState.soundEnabled) return;
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'click') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(520, now);
+          osc.frequency.exponentialRampToValueAtTime(320, now + 0.08);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        } else if (type === 'solve') {
+          // Ascending harp/chime triad
+          const freqs = [523.25, 659.25, 783.99, 1046.5];
+          freqs.forEach((f, idx) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(f, now + idx * 0.07);
+            g.gain.setValueAtTime(0.09, now + idx * 0.07);
+            g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.35);
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start(now + idx * 0.07);
+            o.stop(now + idx * 0.07 + 0.35);
+          });
+        } else if (type === 'error') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(160, now);
+          osc.frequency.linearRampToValueAtTime(120, now + 0.18);
+          gain.gain.setValueAtTime(0.07, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+          osc.start(now);
+          osc.stop(now + 0.18);
+        } else if (type === 'treasure') {
+          const chord = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
+          chord.forEach((f, idx) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(f, now + idx * 0.09);
+            g.gain.setValueAtTime(0.11, now + idx * 0.09);
+            g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.9);
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start(now + idx * 0.09);
+            o.stop(now + idx * 0.09 + 0.9);
+          });
+        }
+      } catch (e) {
+        // Ignore audio errors if blocked by browser autoplay policies
+      }
+    }
+
+    // Initialize or Reset Expedition
+    function resetGame() {
+      gameState.currentNodeId = 0;
+      gameState.nodeStatus = Array(15).fill('locked');
+      gameState.nodeStatus[0] = 'unlocked'; // Root starts unlocked
+      gameState.totalSolves = 0;
+      gameState.treasureCelebrated = false;
+      renderAll();
+      showToast("⚓", "New expedition charted! Begin at Smuggler's Cove.");
+    }
+
+    // Select & Travel to an Unlocked/Explored Node
+    function selectNode(nodeId) {
+      const status = gameState.nodeStatus[nodeId];
+      if (status === 'locked') {
+        playSound('error');
+        showToast("🌫️", "That sea-lane is shrouded in fog! Explore its parent landmark first.");
+        return;
+      }
+      playSound('click');
+      gameState.currentNodeId = nodeId;
+      renderAll();
+    }
+
+    // Navigate to Parent Node
+    function goToParentNode() {
+      if (gameState.currentNodeId === 0) return;
+      const parentId = Math.floor((gameState.currentNodeId - 1) / 2);
+      selectNode(parentId);
+    }
+
+    // Handle Riddle Answer Attempt
+    function submitAnswer(optionIdx) {
+      const node = LANDMARKS_DATA[gameState.currentNodeId];
+      const feedbackEl = document.getElementById('puzzle-feedback');
+
+      if (gameState.nodeStatus[node.id] === 'explored') return;
+
+      if (optionIdx === node.answerIndex) {
+        // Correct! Mark explored & unlock Left + Right child branches
+        gameState.nodeStatus[node.id] = 'explored';
+        gameState.totalSolves++;
+
+        const leftChildId = 2 * node.id + 1;
+        const rightChildId = 2 * node.id + 2;
+        let unlockedMsg = "Sanctum seal broken!";
+
+        if (leftChildId < 15 && rightChildId < 15) {
+          if (gameState.nodeStatus[leftChildId] === 'locked') {
+            gameState.nodeStatus[leftChildId] = 'unlocked';
+          }
+          if (gameState.nodeStatus[rightChildId] === 'locked') {
+            gameState.nodeStatus[rightChildId] = 'unlocked';
+          }
+          unlockedMsg = `Unlocked 2 new paths: ${LANDMARKS_DATA[leftChildId].name} & ${LANDMARKS_DATA[rightChildId].name}!`;
+        }
+
+        playSound('solve');
+        renderAll();
+
+        // Check 100% completion condition
+        const exploredCount = getExploredCount();
+        if (exploredCount === 15 && !gameState.treasureCelebrated) {
+          gameState.treasureCelebrated = true;
+          setTimeout(() => {
+            playSound('treasure');
+            openTreasureModal();
+          }, 550);
+        } else {
+          showToast("🧭", unlockedMsg);
+        }
+      } else {
+        playSound('error');
+        feedbackEl.classList.remove('hidden');
+        feedbackEl.className = "mt-3 p-3 rounded-xl text-sm font-medium border bg-rose-950/10 border-rose-800/30 text-rose-900";
+        feedbackEl.innerHTML = `<strong>Off Course!</strong> The ancient mechanism refuses to turn. Re-read the clue and try another heading.`;
+      }
+    }
+
+    function getExploredCount() {
+      return gameState.nodeStatus.filter(s => s === 'explored').length;
+    }
+
+    // Master Render Function
+    function renderAll() {
+      renderHeaderProgress();
+      renderSvgTree();
+      renderLandmarkJournal();
+    }
+
+    // Update Top Progress Bar & Treasure Vault Buttons
+    function renderHeaderProgress() {
+      const explored = getExploredCount();
+      const total = LANDMARKS_DATA.length;
+      const pct = Math.round((explored / total) * 100);
+
+      document.getElementById('progress-text').textContent = `${explored} / ${total}`;
+      document.getElementById('progress-bar').style.width = `${pct}%`;
+      document.getElementById('progress-pct').textContent = `${pct}%`;
+
+      const headerBtn = document.getElementById('chest-header-btn');
+      const headerIcon = document.getElementById('chest-header-icon');
+      const headerLabel = document.getElementById('chest-header-label');
+
+      const vaultCard = document.getElementById('treasure-vault-card');
+      const vaultIcon = document.getElementById('vault-icon');
+      const vaultText = document.getElementById('vault-text');
+
+      if (explored === total) {
+        headerBtn.className = "flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-display font-bold tracking-wide transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-yellow-400 border-amber-200 text-slate-950 shadow-lg shadow-amber-500/30 animate-bounce";
+        headerIcon.textContent = "👑";
+        headerLabel.textContent = "OPEN TREASURE!";
+
+        vaultCard.className = "w-full sm:w-auto px-4 py-2 rounded-xl border font-display text-xs font-bold tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-emerald-500 border-amber-200 text-slate-950 shadow-lg shadow-amber-500/25";
+        vaultIcon.textContent = "👑";
+        vaultText.textContent = "REVEAL FINAL TREASURE (15/15 COMPLETE)";
+      } else {
+        headerBtn.className = "flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-display font-bold tracking-wide transition-all cursor-pointer bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500";
+        headerIcon.textContent = "🔒";
+        headerLabel.textContent = `Vault (${total - explored} Left)`;
+
+        vaultCard.className = "w-full sm:w-auto px-4 py-2 rounded-xl border font-display text-xs font-bold tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-500";
+        vaultIcon.textContent = "🔒";
+        vaultText.textContent = `FINAL TREASURE LOCKED (${total - explored} LANDMARKS REMAINING)`;
+      }
+    }
+
+    // Render Interactive Binary Tree SVG Map
+    function renderSvgTree() {
+      const edgesLayer = document.getElementById('svg-edges-layer');
+      const nodesLayer = document.getElementById('svg-nodes-layer');
+      edgesLayer.innerHTML = '';
+      nodesLayer.innerHTML = '';
+
+      // 1. Draw Branches (Parent -> Left & Right Children)
+      for (let i = 0; i < 7; i++) {
+        const parentCoord = NODE_COORDS[i];
+        const children = [
+          { id: 2 * i + 1, label: 'L' },
+          { id: 2 * i + 2, label: 'R' }
+        ];
+
+        children.forEach(child => {
+          const childCoord = NODE_COORDS[child.id];
+          const childStatus = gameState.nodeStatus[child.id];
+          const parentStatus = gameState.nodeStatus[i];
+
+          // Curved nautical Bezier path
+          const midY = (parentCoord.y + childCoord.y) / 2;
+          const d = `M ${parentCoord.x} ${parentCoord.y} C ${parentCoord.x} ${midY}, ${childCoord.x} ${midY}, ${childCoord.x} ${childCoord.y}`;
+
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", d);
+          path.setAttribute("fill", "none");
+
+          if (childStatus === 'explored') {
+            path.setAttribute("class", "branch-explored");
+          } else if (childStatus === 'unlocked' || parentStatus === 'explored') {
+            path.setAttribute("class", "branch-unlocked");
+          } else {
+            path.setAttribute("class", "branch-locked");
+          }
+          edgesLayer.appendChild(path);
+
+          // Small L / R branch direction tag along edge
+          const labelX = (parentCoord.x * 0.42 + childCoord.x * 0.58);
+          const labelY = (parentCoord.y * 0.42 + childCoord.y * 0.58);
+          const tag = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          tag.setAttribute("x", labelX);
+          tag.setAttribute("y", labelY);
+          tag.setAttribute("text-anchor", "middle");
+          tag.setAttribute("font-family", "JetBrains Mono, monospace");
+          tag.setAttribute("font-size", "9");
+          tag.setAttribute("fill", childStatus === 'locked' ? "#475569" : "#94a3b8");
+          tag.textContent = child.label;
+          edgesLayer.appendChild(tag);
+        });
+      }
+
+      // 2. Draw Landmark Nodes
+      LANDMARKS_DATA.forEach((node, idx) => {
+        const coord = NODE_COORDS[idx];
+        const status = gameState.nodeStatus[idx];
+        const isActive = gameState.currentNodeId === idx;
+
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("transform", `translate(${coord.x}, ${coord.y})`);
+        g.style.cursor = status === 'locked' ? 'not-allowed' : 'pointer';
+        g.addEventListener('click', () => selectNode(idx));
+
+        // Ambient Aura for Active or Explored nodes
+        if (isActive) {
+          const aura = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          aura.setAttribute("r", "34");
+          aura.setAttribute("fill", "url(#activeGlow)");
+          g.appendChild(aura);
+        } else if (status === 'explored') {
+          const aura = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          aura.setAttribute("r", "28");
+          aura.setAttribute("fill", "url(#exploredGlow)");
+          g.appendChild(aura);
+        }
+
+        // Pulsing Ring for Unlocked Unvisited Nodes
+        if (status === 'unlocked') {
+          const pulse = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          pulse.setAttribute("r", "21");
+          pulse.setAttribute("fill", "none");
+          pulse.setAttribute("stroke", "#38bdf8");
+          pulse.setAttribute("stroke-width", "2");
+          pulse.setAttribute("class", "node-pulse");
+          g.appendChild(pulse);
+        }
+
+        // Main Node Circle
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("r", isActive ? "21" : "18");
+
+        if (status === 'explored') {
+          circle.setAttribute("fill", "#064e3b");
+          circle.setAttribute("stroke", isActive ? "#fbbf24" : "#10b981");
+          circle.setAttribute("stroke-width", isActive ? "3.5" : "2.5");
+        } else if (status === 'unlocked') {
+          circle.setAttribute("fill", "#0c4a6e");
+          circle.setAttribute("stroke", isActive ? "#fbbf24" : "#38bdf8");
+          circle.setAttribute("stroke-width", isActive ? "3.5" : "2.5");
+        } else {
+          circle.setAttribute("fill", "#0f172a");
+          circle.setAttribute("stroke", "#334155");
+          circle.setAttribute("stroke-width", "1.75");
+        }
+        g.appendChild(circle);
+
+        // Node Center Icon / Number
+        const iconText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        iconText.setAttribute("text-anchor", "middle");
+        iconText.setAttribute("dominant-baseline", "central");
+        iconText.setAttribute("font-size", status === 'locked' ? "12" : "14");
+        iconText.textContent = status === 'locked' ? "🌫️" : node.emoji;
+        g.appendChild(iconText);
+
+        // Explored Checkmark Badge
+        if (status === 'explored') {
+          const badgeCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          badgeCircle.setAttribute("cx", "14");
+          badgeCircle.setAttribute("cy", "-14");
+          badgeCircle.setAttribute("r", "7");
+          badgeCircle.setAttribute("fill", "#10b981");
+          badgeCircle.setAttribute("stroke", "#022c22");
+          badgeCircle.setAttribute("stroke-width", "1.5");
+          g.appendChild(badgeCircle);
+
+          const checkText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          checkText.setAttribute("x", "14");
+          checkText.setAttribute("y", "-13.5");
+          checkText.setAttribute("text-anchor", "middle");
+          checkText.setAttribute("dominant-baseline", "central");
+          checkText.setAttribute("font-size", "9");
+          checkText.setAttribute("font-weight", "bold");
+          checkText.setAttribute("fill", "#022c22");
+          checkText.textContent = "✓";
+          g.appendChild(checkText);
+        }
+
+        // Node Title Label Below Circle
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("y", "31");
+        label.setAttribute("text-anchor", "middle");
+        label.setAttribute("font-family", "JetBrains Mono, monospace");
+        label.setAttribute("font-size", "9.5");
+        label.setAttribute("font-weight", isActive ? "bold" : "normal");
+        label.setAttribute("fill", isActive ? "#fbbf24" : (status === 'locked' ? "#475569" : "#cbd5e1"));
+
+        // Short label for leaf nodes so they never overlap horizontally
+        const shortName = node.level === 3
+          ? `#${node.id + 1} ${node.name.split(' ')[0]}`
+          : node.name;
+        label.textContent = status === 'locked' ? `Locked #${node.id + 1}` : shortName;
+        g.appendChild(label);
+
+        nodesLayer.appendChild(g);
+      });
+
+      // 3. Final Treasure Chest Node at Bottom Center (Linked visually from Level 3)
+      const exploredCount = getExploredCount();
+      const allDone = exploredCount === 15;
+      const chestG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      chestG.setAttribute("transform", "translate(430, 520)");
+      chestG.style.cursor = "pointer";
+      chestG.addEventListener('click', handleTreasureButtonClick);
+
+      const chestRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      chestRect.setAttribute("x", "-135");
+      chestRect.setAttribute("y", "-20");
+      chestRect.setAttribute("width", "270");
+      chestRect.setAttribute("height", "36");
+      chestRect.setAttribute("rx", "18");
+      chestRect.setAttribute("fill", allDone ? "#78350f" : "#0f172a");
+      chestRect.setAttribute("stroke", allDone ? "#fbbf24" : "#334155");
+      chestRect.setAttribute("stroke-width", allDone ? "2.5" : "1.5");
+      chestG.appendChild(chestRect);
+
+      const chestText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      chestText.setAttribute("text-anchor", "middle");
+      chestText.setAttribute("dominant-baseline", "central");
+      chestText.setAttribute("font-family", "Cinzel, serif");
+      chestText.setAttribute("font-size", "11.5");
+      chestText.setAttribute("font-weight", "bold");
+      chestText.setAttribute("fill", allDone ? "#fde68a" : "#64748b");
+      chestText.textContent = allDone
+        ? "👑 GRAND TREASURE UNLOCKED!"
+        : `🔒 FINAL TREASURE (${exploredCount}/15)`;
+      chestG.appendChild(chestText);
+
+      nodesLayer.appendChild(chestG);
+    }
+
+    // Render Right-Side Parchment Clue & Puzzle Journal
+    function renderLandmarkJournal() {
+      const node = LANDMARKS_DATA[gameState.currentNodeId];
+      const status = gameState.nodeStatus[node.id];
+      const isExplored = status === 'explored';
+
+      document.getElementById('node-badge').textContent = `NODE #${node.id + 1} • LEVEL ${node.level}`;
+      document.getElementById('node-path-code').textContent = `PATH: ${node.pathCode}`;
+      document.getElementById('landmark-emoji').textContent = node.emoji;
+      document.getElementById('landmark-title').textContent = node.name;
+      document.getElementById('landmark-region').textContent = node.region;
+      document.getElementById('landmark-lore').textContent = `"${node.lore}"`;
+
+      const statusPill = document.getElementById('node-status-pill');
+      if (isExplored) {
+        statusPill.textContent = "✓ EXPLORED";
+        statusPill.className = "px-2.5 py-0.5 rounded-full text-xs font-bold font-mono-code bg-emerald-800 text-emerald-100";
+      } else {
+        statusPill.textContent = "● UNEXPLORED";
+        statusPill.className = "px-2.5 py-0.5 rounded-full text-xs font-bold font-mono-code bg-sky-900/15 text-sky-900 border border-sky-800/30";
+      }
+
+      // Render Puzzle or Solved Fragment
+      const questionEl = document.getElementById('puzzle-question');
+      const optionsEl = document.getElementById('puzzle-options');
+      const feedbackEl = document.getElementById('puzzle-feedback');
+      const fragmentTag = document.getElementById('clue-fragment-tag');
+
+      questionEl.textContent = node.question;
+      optionsEl.innerHTML = '';
+      feedbackEl.classList.add('hidden');
+
+      if (node.level === 3) {
+        fragmentTag.textContent = isExplored ? "Sanctum Cleared" : "Leaf Sanctum Seal";
+      } else {
+        fragmentTag.textContent = isExplored ? "Branches Unlocked" : "Unlocks 2 Branches";
+      }
+
+      node.options.forEach((optText, idx) => {
+        const btn = document.createElement('button');
+        const isCorrectOption = idx === node.answerIndex;
+
+        if (isExplored) {
+          btn.disabled = true;
+          btn.className = isCorrectOption
+            ? "w-full text-left px-4 py-2.5 rounded-xl border-2 border-emerald-700 bg-emerald-900/15 text-emerald-950 font-semibold text-sm flex items-center justify-between"
+            : "w-full text-left px-4 py-2.5 rounded-xl border border-amber-900/15 bg-amber-950/5 text-stone-500 text-sm opacity-60";
+          btn.innerHTML = `<span>${String.fromCharCode(65 + idx)}. ${optText}</span>` + (isCorrectOption ? `<span class="text-xs font-mono-code font-bold text-emerald-800">✓ SOLVED</span>` : '');
+        } else {
+          btn.className = "w-full text-left px-4 py-2.5 rounded-xl border border-amber-900/30 bg-white/60 hover:bg-amber-500/20 hover:border-amber-700 text-stone-900 font-medium text-sm transition-all cursor-pointer flex items-center justify-between group";
+          btn.innerHTML = `<span><strong class="font-mono-code text-amber-900 mr-1.5">${String.fromCharCode(65 + idx)}.</strong> ${optText}</span><span class="text-xs text-amber-800 opacity-0 group-hover:opacity-100 font-mono-code">Select →</span>`;
+          btn.onclick = () => submitAnswer(idx);
+        }
+        optionsEl.appendChild(btn);
+      });
+
+      if (isExplored) {
+        feedbackEl.classList.remove('hidden');
+        feedbackEl.className = "mt-3 p-3 rounded-xl text-sm font-medium border bg-emerald-900/15 border-emerald-700/40 text-emerald-950";
+        feedbackEl.innerHTML = `<strong>Fragment Recovered:</strong> ${node.fragment}`;
+      }
+
+      // Render Child Branching Buttons (Left & Right)
+      const branchActions = document.getElementById('branch-actions');
+      branchActions.innerHTML = '';
+
+      if (node.level < 3) {
+        const leftId = 2 * node.id + 1;
+        const rightId = 2 * node.id + 2;
+        const children = [
+          { dir: 'Left Branch (L)', id: leftId },
+          { dir: 'Right Branch (R)', id: rightId }
+        ];
+
+        children.forEach(ch => {
+          const chNode = LANDMARKS_DATA[ch.id];
+          const chStatus = gameState.nodeStatus[ch.id];
+          const btn = document.createElement('button');
+
+          if (chStatus === 'locked') {
+            btn.disabled = true;
+            btn.className = "p-3 rounded-xl border border-stone-800/20 bg-stone-900/5 text-stone-500 text-left opacity-75 cursor-not-allowed";
+            btn.innerHTML = `
+              <span class="block text-[10px] font-mono-code uppercase">${ch.dir}</span>
+              <span class="font-display font-bold text-xs flex items-center gap-1.5 mt-0.5">🔒 Solve Trial to Unlock</span>
+            `;
+          } else {
+            const badge = chStatus === 'explored' ? '✓ Explored' : '● New Path';
+            const badgeColor = chStatus === 'explored' ? 'text-emerald-800' : 'text-sky-800';
+            btn.className = "p-3 rounded-xl border border-amber-900/35 bg-amber-500/15 hover:bg-amber-500/30 text-amber-950 text-left transition-all cursor-pointer shadow-sm";
+            btn.innerHTML = `
+              <div class="flex items-center justify-between text-[10px] font-mono-code uppercase">
+                <span>${ch.dir}</span>
+                <span class="font-bold ${badgeColor}">${badge}</span>
+              </div>
+              <span class="font-display font-bold text-xs sm:text-sm flex items-center gap-1.5 mt-1">
+                <span>${chNode.emoji}</span> ${chNode.name} →
+              </span>
+            `;
+            btn.onclick = () => selectNode(ch.id);
+          }
+          branchActions.appendChild(btn);
+        });
+      } else {
+        // Leaf Sanctum Notice
+        const leafNotice = document.createElement('div');
+        leafNotice.className = "col-span-2 p-3 rounded-xl bg-amber-950/10 border border-amber-900/20 text-xs text-stone-800";
+        const remaining = 15 - getExploredCount();
+        leafNotice.innerHTML = remaining === 0
+          ? `<strong>All 15 Landmarks Explored!</strong> The Grand Treasure Chest is now open!`
+          : `<strong>Terminal Sanctum (Level 3):</strong> No further branches extend from here. Backtrack via the chart or parent button to explore the remaining <strong>${remaining}</strong> landmark(s).`;
+        branchActions.appendChild(leafNotice);
+      }
+
+      // Show/Hide Backtrack to Parent Button
+      const parentContainer = document.getElementById('parent-nav-container');
+      if (node.id > 0) {
+        const parentNode = LANDMARKS_DATA[Math.floor((node.id - 1) / 2)];
+        parentContainer.classList.remove('hidden');
+        document.getElementById('backtrack-btn').innerHTML = `<span>↖</span> Backtrack to ${parentNode.name} (Level ${parentNode.level})`;
+      } else {
+        parentContainer.classList.add('hidden');
+      }
+    }
+
+    // Handle Click on Final Treasure Chest Button
+    function handleTreasureButtonClick() {
+      const explored = getExploredCount();
+      if (explored === 15) {
+        playSound('treasure');
+        openTreasureModal();
+      } else {
+        playSound('error');
+        const remaining = 15 - explored;
+        showToast("🔒", `Seal intact! Explore all ${remaining} remaining landmark(s) to unlock the Final Treasure.`);
+      }
+    }
+
+    // Toast Notification Helper
+    let toastTimeout = null;
+    function showToast(icon, message) {
+      const banner = document.getElementById('toast-banner');
+      document.getElementById('toast-icon').textContent = icon;
+      document.getElementById('toast-message').textContent = message;
+
+      banner.classList.remove('translate-y-24', 'opacity-0');
+      banner.classList.add('translate-y-0', 'opacity-100');
+
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        banner.classList.add('translate-y-24', 'opacity-0');
+        banner.classList.remove('translate-y-0', 'opacity-100');
+      }, 3400);
+    }
+
+    // Sound Toggle
+    function toggleSound() {
+      gameState.soundEnabled = !gameState.soundEnabled;
+      document.getElementById('sound-on-icon').classList.toggle('hidden', !gameState.soundEnabled);
+      document.getElementById('sound-off-icon').classList.toggle('hidden', gameState.soundEnabled);
+      if (gameState.soundEnabled) playSound('click');
+    }
+
+    // Modal Controls
+    function openTreasureModal() {
+      document.getElementById('stat-attempts').textContent = `${gameState.totalSolves} / 15`;
+      const modal = document.getElementById('treasure-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeTreasureModal() {
+      const modal = document.getElementById('treasure-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function openResetConfirm() {
+      playSound('click');
+      const modal = document.getElementById('reset-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeResetConfirm() {
+      const modal = document.getElementById('reset-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // Snapshot & Explored vs Unexplored Report Modal
+    function openSnapshotModal() {
+      playSound('click');
+      const exploredCount = gameState.nodeStatus.filter(s => s === 'explored').length;
+      const unlockedCount = gameState.nodeStatus.filter(s => s === 'unlocked').length;
+      const lockedCount = gameState.nodeStatus.filter(s => s === 'locked').length;
+
+      document.getElementById('snap-explored-count').textContent = exploredCount;
+      document.getElementById('snap-unlocked-count').textContent = unlockedCount;
+      document.getElementById('snap-locked-count').textContent = lockedCount;
+      document.getElementById('snap-vault-status').textContent = exploredCount === 15 ? "UNLOCKED 👑" : "SEALED 🔒";
+      document.getElementById('snap-timestamp').textContent = new Date().toLocaleTimeString();
+
+      // Clone live SVG chart into snapshot container
+      const liveSvg = document.getElementById('tree-svg');
+      const clonedSvg = liveSvg.cloneNode(true);
+      clonedSvg.removeAttribute('id');
+      const container = document.getElementById('snapshot-svg-container');
+      container.innerHTML = '';
+      container.appendChild(clonedSvg);
+
+      // Populate Traversal Table
+      const tbody = document.getElementById('snapshot-table-body');
+      tbody.innerHTML = '';
+      LANDMARKS_DATA.forEach((node, idx) => {
+        const st = gameState.nodeStatus[idx];
+        let badge = '';
+        if (st === 'explored') {
+          badge = `<span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">EXPLORED</span>`;
+        } else if (st === 'unlocked') {
+          badge = `<span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40">UNLOCKED</span>`;
+        } else {
+          badge = `<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700">UNEXPLORED (FOG)</span>`;
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="py-2 px-3 text-slate-300">#${node.id + 1}</td>
+          <td class="py-2 px-3 text-slate-400">Level ${node.level}</td>
+          <td class="py-2 px-3 text-amber-400/90">${node.pathCode}</td>
+          <td class="py-2 px-3 text-slate-200 font-semibold">${node.emoji} ${node.name}</td>
+          <td class="py-2 px-3">${badge}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      const modal = document.getElementById('snapshot-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeSnapshotModal() {
+      const modal = document.getElementById('snapshot-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // Copy Structured Exploration Report to Clipboard using execCommand fallback
+    function copyReportText() {
+      const explored = getExploredCount();
+      let lines = [
+        "=== TREASURE MAP HUNT — EXPLORATION COVERAGE REPORT ===",
+        `Progress: ${explored} / 15 Landmarks Explored (${Math.round((explored / 15) * 100)}%)`,
+        `Final Treasure Chest: ${explored === 15 ? "UNLOCKED" : "LOCKED"}`,
+        "-------------------------------------------------------"
+      ];
+      LANDMARKS_DATA.forEach((n, i) => {
+        lines.push(`[${gameState.nodeStatus[i].toUpperCase().padEnd(8)}] Node #${String(n.id + 1).padStart(2, '0')} (Lvl ${n.level} | ${n.pathCode.padEnd(9)}): ${n.name}`);
+      });
+
+      const textArea = document.createElement("textarea");
+      textArea.value = lines.join("\n");
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand("copy");
+        showToast("📋", "Exploration report copied to clipboard!");
+      } catch (err) {
+        showToast("⚠️", "Unable to copy automatically.");
+      }
+      document.body.removeChild(textArea);
+    }
+
+    // Boot Application
+    window.addEventListener('DOMContentLoaded', () => {
+      resetGame();
+    });
+  </script>
+</body>
+</html>
